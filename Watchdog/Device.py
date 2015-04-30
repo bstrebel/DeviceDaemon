@@ -28,6 +28,10 @@ class Device:
         logging.debug("Timestamp: %d" % self._timestamp)
 
     @property
+    def age(self):
+        return time.time() - self._timestamp
+
+    @property
     def address(self): return self._address
 
     @property

@@ -15,6 +15,7 @@ from Device import *
 
 
 class BluetoothDevice(Device):
+
     _pattern = re.compile("[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}")
 
     @staticmethod
@@ -53,10 +54,6 @@ class BluetoothDevice(Device):
             return False
         self.update()
         return True
-
-    def age(self):
-        age = time.time() - self._timestamp
-        return age
 
 
 class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
@@ -107,7 +104,7 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
         # except AttributeError: self.devices = {}
 
         for addr, device in self._devices.items():
-            if device.age() > seconds:
+            if device.age > seconds:
                 logging.debug("Expired: %s" % device.name)
                 del device
                 del self._devices[addr]

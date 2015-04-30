@@ -17,6 +17,7 @@ from ping import do_one
 
 
 class PingDevice(Device):
+
     _pattern = re.compile("\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}")
     _devnull = open(os.devnull, 'w')
 
@@ -83,6 +84,7 @@ class PingDevice(Device):
 
 
 class PingDiscoverDevice():
+
     def __init__(self, devices, callback):
 
         self._devices = {}
@@ -98,7 +100,7 @@ class PingDiscoverDevice():
     def expired(self, seconds):
 
         for addr, device in self._devices.items():
-            if device.age() > seconds:
+            if device.age > seconds:
                 logging.debug("Expired: %s" % device.name)
                 del device
                 del self._devices[addr]
