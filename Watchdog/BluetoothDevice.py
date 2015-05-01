@@ -57,6 +57,7 @@ class BluetoothDevice(Device):
 
 
 class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
+
     def __init__(self, callback):
         self._done = False
         self._inquired = []
