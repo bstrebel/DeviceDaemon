@@ -10,8 +10,9 @@ import time
 
 class Device:
 
-    def __init__(self, address, name):
+    def __init__(self, logger, address, name):
 
+        self._logger = logger
         self._address = address
         self._name = name
         self._timestamp = 0
@@ -25,7 +26,7 @@ class Device:
 
     def update(self):
         self._timestamp = time.time()
-        logging.debug("Timestamp: %d" % self._timestamp)
+        self._logger.debug("Timestamp: %d" % self._timestamp)
 
     @property
     def age(self):

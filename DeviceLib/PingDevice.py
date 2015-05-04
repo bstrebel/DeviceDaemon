@@ -4,7 +4,7 @@
     check devices by ip address or hostname
 
 """
-__version__ = "0.1"
+__version__ = "1.0"
 __author__ = 'bst'
 
 import os
@@ -42,7 +42,9 @@ class PingDevice(Device):
             else:
                 return None
 
-    def __init__(self, identifier):
+    def __init__(self, logger, identifier):
+
+        self._logger = logger
 
         if self._pattern.match(identifier):
             address = identifier
@@ -57,7 +59,7 @@ class PingDevice(Device):
             except socket.error:
                 address = "0.0.0.0"
 
-        Device.__init__(self, address=address, name=name)
+        Device.__init__(self, logger=self._logger, address=address, name=name)
 
     def check(self, callback):
         """
@@ -65,17 +67,20 @@ class PingDevice(Device):
         :param callback: dictionary of callback functions
         :return: True, if device is online
         """
+
+        self._logger.debug("Check ping device [%s]" % self._address)
+
         result = self._ping(self._address)
         if result is None:
             if self._online:
-                logging.debug("Off: %s", self._address)
+                self._logger.debug("Off: %s", self._address)
                 self._online = False
                 callback['off'](self)
 
             return False
         else:
             if not self._online:
-                logging.debug("New: %s", self._address)
+                self._logger.debug("New: %s", self._address)
                 self._online = True
                 callback['new'](self)
 
@@ -85,12 +90,14 @@ class PingDevice(Device):
 
 class PingDiscoverDevice():
 
-    def __init__(self, devices, callback):
+    def __init__(self, options):
+
+        self._logger = options['logger']
+        self._callback = options['callback']
 
         self._devices = {}
-        self._callback = callback
-        for device in devices:
-            d = PingDevice(device)
+        for device in options['devices']:
+            d = PingDevice(self._logger, device)
             self._devices[d.address] = d
 
     def discover(self):
@@ -101,7 +108,7 @@ class PingDiscoverDevice():
 
         for addr, device in self._devices.items():
             if device.age > seconds:
-                logging.debug("Expired: %s" % device.name)
+                self._logger.debug("Expired: %s" % device.name)
                 del device
                 del self._devices[addr]
 
@@ -122,10 +129,15 @@ if __name__ == '__main__':
     def evt_off(ping_device):
         print("Device [%s] disappeared" % ping_device.address)
 
+
     callback = {'new': evt_new, 'off': evt_off}
     devices = ['127.0.0.1', 'sensor', 'htc', 'access']
 
-    discover = PingDiscoverDevice(devices, callback)
+    options = { 'logger': logging.getLogger(),
+                'callback': {'new': evt_new, 'off': evt_off},
+                'devices': ['127.0.0.1', '172.16.0.1', '172.16.255.42']}
+
+    discover = PingDiscoverDevice(options)
 
     while True:
         discover.discover()
