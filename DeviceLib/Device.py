@@ -16,7 +16,7 @@ class Device:
         self._address = address
         self._name = name
         self._timestamp = 0
-        self._online = False
+        self._online = None
 
     def check(self, callback):
         """
@@ -26,7 +26,7 @@ class Device:
 
     def update(self):
         self._timestamp = time.time()
-        self._logger.debug("Timestamp: %d" % self._timestamp)
+        # self._logger.debug("Timestamp: %d" % self._timestamp)
 
     @property
     def age(self):

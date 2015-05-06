@@ -81,14 +81,15 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
         # except AttributeError: self.devices = {}
 
         if address in self._devices:
-            self._logger.debug("Update: %s" % name)
+            self._logger.debug("Bluetooth device update [%s] %s " % (address, name))
+            pass
         else:
-            self._logger.debug("New: %s" % name)
+            # self._logger.debug("New: %s" % name)
             self._devices[address] = BluetoothDevice(self._logger, address, name)
             self._callback['new'](self._devices[address])
 
         self._devices[address].update()
-        self._devices[address]._online = True
+        self._devices[address].online = True
         self._inquired.append(address)
 
     def inquiry_complete(self):
@@ -101,9 +102,9 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
         for addr, device in self._devices.items():
             if addr not in self._inquired:
                 if device.online:
-                    device.online = False
                     self._logger.debug("Off: %s" % device.name)
                     self._callback['off'](device)
+                    device.online = False
 
         self._done = True
 
@@ -155,5 +156,5 @@ if __name__ == '__main__':
 
         if discover._done:
             time.sleep(1)
-            discover.expired(30)
+            discover.expired(options['bluetooth']['expire'])
             discover.find_devices()

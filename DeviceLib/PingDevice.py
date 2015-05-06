@@ -23,19 +23,14 @@ class PingDevice(Device):
 
     @staticmethod
     def _ping(host):
-
         if os.geteuid() == 0:
-            '''
-                running as root => use python ICMP
-            '''
+            # running as root => use python ICMP            '''
             try:
                 return do_one(host, 1, 64)
             except socket.error:
                 return None
         else:
-            '''
-                running suid ping as non-root user
-            '''
+            # running suid ping as non-root user
             if subprocess.call(["ping", "-q", "-c1", "-W1", host], stdout=PingDevice._devnull,
                                stderr=PingDevice._devnull) == 0:
                 return True
@@ -68,23 +63,23 @@ class PingDevice(Device):
         :return: True, if device is online
         """
 
-        self._logger.debug("Check ping device [%s]" % self._address)
-
         result = self._ping(self._address)
+        self.update()
+        self._logger.debug('Ping device [%s] %s: %s' % (self._address, self._name, "Offline" if result is None else "Online"))
+
         if result is None:
             if self._online:
-                self._logger.debug("Off: %s", self._address)
-                self._online = False
+                # self._logger.debug("Off: %s", self._address)
                 callback['off'](self)
+                self._online = False
 
             return False
         else:
             if not self._online:
-                self._logger.debug("New: %s", self._address)
-                self._online = True
+                # self._logger.debug("New: %s", self._address)
                 callback['new'](self)
+                self._online = True
 
-            self.update()
             return True
 
 

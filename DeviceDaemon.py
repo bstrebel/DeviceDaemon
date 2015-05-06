@@ -27,19 +27,27 @@ class Controller():
 
     def bluetooth_new(self, bt_device):
         assert isinstance(bt_device, BluetoothDevice)
-        self._logger.info("Found new device [%s]" % bt_device.address)
+        self._logger.info('Found new bluetooth device [%s] %s' % (bt_device.address, bt_device.name))
 
     def bluetooth_off(self, bt_device):
         assert isinstance(bt_device, BluetoothDevice)
-        self._logger.info("Device [%s] disappeared" % bt_device.address)
+        self._logger.info('Bluetooth device disappeared [%s] %s' % (bt_device.address, bt_device.name))
 
     def ping_new(self, ping_device):
         assert isinstance(ping_device, PingDevice)
-        self._logger.info("Found new device [%s]" % ping_device.address)
+        if ping_device.online is None:
+            # device found by the first check after daemon starts
+            self._logger.info('Found ip device [%s] %s' % (ping_device.address, ping_device.name))
+        else:
+            self._logger.info("Found new ip device [%s] %s" % (ping_device.address, ping_device.name))
 
     def ping_off(self, ping_device):
         assert isinstance(ping_device, PingDevice)
-        self._logger.info("Device [%s] disappeared" % ping_device.address)
+        if ping_device.online is None:
+            # device offline during first check after daemon starts
+            self._logger.info('IP device offline [%s] %s' % (ping_device.address, ping_device.name))
+        else:
+            self._logger.info('IP device disappeared [%s] %s' % (ping_device.address, ping_device.name))
 
     def __init__(self, options):
 
@@ -61,7 +69,7 @@ class Controller():
     def init(self):
         self._logger.info("Controller init ...")
 
-        self._ping['discover'] = PingDiscoverDevice( self._ping )
+        self._ping['discover'] = PingDiscoverDevice(self._ping )
         self._bluetooth['discover'] = BluetoothDiscoverDevice(self._bluetooth)
 
 
@@ -185,8 +193,8 @@ def main():
                               'Daemon': False,
                               }
 
-    defaults['bluetooth'] = {}
-    defaults['ping'] = {'devices': ['172.16.255.42', '172.16.0.1']}
+    defaults['bluetooth'] = {'expire': 30}
+    defaults['ping'] = {'devices': '127.0.0.1'}
     defaults['pir'] = {}
 
     # read configuration files
@@ -207,6 +215,8 @@ def main():
             if config.has_section(sec):
                 if config.has_option(sec,key):
                     options[sec][key] = config.get(sec,key)
+
+    options['ping']['devices'] = options['ping']['devices'].split(',')
 
     # initialize logging from configuration file settings
     if args.log:
@@ -240,8 +250,13 @@ def main():
 
         # sys.stderr.write("Running DeviceDaemon in background ...\n")
 
+
     logger.info("Initializing device demon [%s] ..." % os.path.basename(sys.argv[0]))
     logger.info("args: %s" % ' '.join(sys.argv[1:]))
+
+    import pprint
+    pp = pprint.PrettyPrinter()
+    pp.pprint(options)
 
     controller = Controller(options)
     controller.init()
