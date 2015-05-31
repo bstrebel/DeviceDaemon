@@ -46,13 +46,13 @@ class PingDevice(Device):
             try:
                 name = socket.gethostbyaddr(address)[0]
             except socket.error:
-                name = "n/a"
+                name = None
         else:
             name = identifier
             try:
                 address = socket.gethostbyname(name)
             except socket.error:
-                address = "0.0.0.0"
+                address = None
 
         Device.__init__(self, logger=self._logger, address=address, name=name)
 
@@ -62,8 +62,18 @@ class PingDevice(Device):
         :param callback: dictionary of callback functions
         :return: True, if device is online
         """
+        host = None
+        if self._address is None:
+            host = self._name
+            try: address = socket.gethostbyname(self._name)
+            except: pass
+        else:
+            host = self._address
 
-        result = self._ping(self._address)
+        if host is None:
+            return False
+
+        result = self._ping(host)
         self.update()
         self._logger.debug('Ping device [%s] %s: %s' % (self._address, self._name, "Offline" if result is None else "Online"))
 
