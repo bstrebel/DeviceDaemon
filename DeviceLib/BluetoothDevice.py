@@ -123,6 +123,7 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
     def done(self): return self._done
 
 
+# region Main
 if __name__ == '__main__':
 
     logging.basicConfig(format='%(asctime)s %(levelname)-7s %(message)s', level=logging.DEBUG)
@@ -158,3 +159,4 @@ if __name__ == '__main__':
             time.sleep(1)
             discover.expired(options['bluetooth']['expire'])
             discover.find_devices()
+# endregion
