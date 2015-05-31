@@ -17,6 +17,7 @@ import logging
 import logging.config
 import argparse
 import ConfigParser
+import pprint
 
 import daemon
 
@@ -254,9 +255,8 @@ def main():
     logger.info("Initializing device demon [%s] ..." % os.path.basename(sys.argv[0]))
     logger.info("args: %s" % ' '.join(sys.argv[1:]))
 
-    import pprint
     pp = pprint.PrettyPrinter()
-    pp.pprint(options)
+    logger.info(pp.pformat(options))
 
     controller = Controller(options)
     controller.init()
@@ -272,6 +272,7 @@ def main():
 
     exit(0)
 
+# region __Main__
 if __name__ == '__main__':
     main()
 
@@ -309,5 +310,4 @@ if __name__ == '__main__':
 
 
     """
-
-
+# endregion
