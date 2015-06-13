@@ -141,7 +141,7 @@ if __name__ == '__main__':
     def evt_off(bt_device):
         print("Device [%s] disappeared" % bt_device.address)
 
-    options = { 'logger': logging.getLogger(),
+    options = { 'logger': logging.getLogger(), 'expire': 30,
                 'callback': {'new': evt_new, 'off': evt_off}}
 
     discover = BluetoothDiscoverDevice(options)
@@ -157,6 +157,6 @@ if __name__ == '__main__':
 
         if discover._done:
             time.sleep(1)
-            discover.expired(options['bluetooth']['expire'])
+            discover.expired(options['expire'])
             discover.find_devices()
 # endregion
