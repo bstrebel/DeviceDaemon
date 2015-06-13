@@ -17,6 +17,8 @@ class Device:
         self._name = name
         self._timestamp = 0
         self._online = None
+        self._zone = None
+        self._update = None
 
     def check(self, callback):
         """
@@ -28,9 +30,9 @@ class Device:
         self._timestamp = time.time()
         # self._logger.debug("Timestamp: %d" % self._timestamp)
 
+# region Properties
     @property
-    def age(self):
-        return time.time() - self._timestamp
+    def age(self): return time.time() - self._timestamp
 
     @property
     def address(self): return self._address
@@ -44,6 +46,18 @@ class Device:
     @online.setter
     def online(self, value): self._online = value
 
+    # @property
+    # def update(self): return self._update
+    #
+    # @update.setter
+    # def update(self, value): self._update = value
+
+    @property
+    def zone(self): return self._zone
+
+    @zone.setter
+    def zone(self, value): self._zone = value
+# endregion
 
 if __name__ == '__main__':
 
