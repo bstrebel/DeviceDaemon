@@ -23,6 +23,8 @@ import daemon
 
 from DeviceLib.BluetoothDevice import BluetoothDiscoverDevice, BluetoothDevice
 from DeviceLib.PingDevice import PingDiscoverDevice, PingDevice
+from DeviceLib.PipeDevice import PipeDiscoverDevice, PipeDevice
+from DeviceLib.HttpDevice import HttpDiscoverDevice, HttpDevice, HttpRequestHandler
 
 class Controller():
 
@@ -50,6 +52,18 @@ class Controller():
         else:
             self._logger.info('IP device disappeared [%s] %s' % (ping_device.address, ping_device.name))
 
+    def http_zone_changed(self, http_device):
+        assert isinstance(http_device, HttpDevice)
+        message = "Device %s with serial %s %s zone %s" %\
+                  (http_device.name, http_device.serial,"entered" if http_device.update else "left", http_device.zone)
+        self._logger.info(message)
+        return 200, message
+
+    def http_get_request(self, request, handler):
+        assert isinstance(handler, HttpRequestHandler)
+        return 200, "Path: %s" % (handler.path)
+
+
     def __init__(self, options):
 
         self._options = options
@@ -59,24 +73,39 @@ class Controller():
         self._root = options['controller']['root']
 
         self._ping = options['ping']
-        self._ping['callback'] = {'new': self.ping_new, 'off': self.ping_off}
         self._ping['logger'] = self._logger
+        self._ping['callback'] = {'new': self.ping_new, 'off': self.ping_off}
 
         self._bluetooth = options['bluetooth']
-        self._bluetooth['callback'] = {'new': self.bluetooth_new, 'off': self.bluetooth_off}
         self._bluetooth['logger'] = self._logger
+        self._bluetooth['callback'] = {'new': self.bluetooth_new, 'off': self.bluetooth_off}
+
+        self._pipe = options['pipe']
+        self._pipe['logger'] = self._logger
+        self._pipe['callback'] = {}
+
+        self._http = options['http']
+        self._http['logger'] = self._logger
+        self._http['callback'] = {'update': self.http_zone_changed, 'request': self.http_get_request}
 
 
     def init(self):
+
         self._logger.info("Controller init ...")
 
         self._ping['discover'] = PingDiscoverDevice(self._ping )
         self._bluetooth['discover'] = BluetoothDiscoverDevice(self._bluetooth)
 
+        self._pipe['discover'] = PipeDiscoverDevice(self._pipe)
+        self._http['discover'] = HttpDiscoverDevice(self._http)
+
 
     def run(self):
 
-        rf = [self._bluetooth['discover'], ]
+        self._pipe['discover'].listen()
+        self._http['discover'].listen()
+
+        rf = [self._bluetooth['discover'], self._pipe['discover'].fifo, self._http['discover'].socket, ]
         self._bluetooth['discover'].find_devices()
 
         while True:
@@ -86,9 +115,15 @@ class Controller():
             if self._bluetooth['discover'] in rfds:
                 self._bluetooth['discover'].process_event()
 
+            if self._pipe['discover'].fifo in rfds:
+                self._pipe['discover'].process_get_request()
+
+            if self._http['discover'].socket in rfds:
+                self._http['discover'].httpd.handle_request()
+
             if self._bluetooth['discover'].done:
                 # time.sleep(1)
-                self._bluetooth['discover'].expired(30)
+                self._bluetooth['discover'].expired(self._bluetooth['expire'])
                 self._bluetooth['discover'].find_devices()
 
             self._ping['discover'].discover()
@@ -101,7 +136,12 @@ class Controller():
 
     def exit(self, *args):
         self._logger.info("Controller exit ...")
+        self._pipe['discover'].close()
+        self._http['discover'].close()
         exit(0)
+
+    def request(self, *args):
+        pass
 
     @property
     def options(self): return self._options
@@ -135,7 +175,6 @@ def daemonize(controller):
     for handle in controller.logger.handlers:
         if type(handle) is logging.StreamHandler:
             controller.logger.removeHandler(handle)
-
 
     context = daemon.DaemonContext(working_directory=controller.root,
                                    files_preserve=_preserve,
@@ -196,6 +235,9 @@ def main():
 
     defaults['bluetooth'] = {'expire': 30}
     defaults['ping'] = {'devices': '127.0.0.1'}
+    defaults['pipe'] = {'path': '/tmp/DeviceDaemon.fifo'}
+    defaults['http'] = {'host': '0.0.0.0', 'port': 8080, 'devices': None}
+
     defaults['pir'] = {}
 
     # read configuration files
@@ -217,7 +259,19 @@ def main():
                 if config.has_option(sec,key):
                     options[sec][key] = config.get(sec,key)
 
+    # check an convert bluetooth expiration time
+    if config.has_section('bluetooth') and config.has_option('bluetooth', 'expire'):
+        options['bluetooth']['expire'] = int(config.get('bluetooth', 'expire'))
+
+    # create array from option string
     options['ping']['devices'] = options['ping']['devices'].split(',')
+
+    # create device hash from options
+    _http_devices = options['http']['devices'].split(',')
+    options['http']['devices'] = {}
+    for dev in _http_devices:
+        if config.has_section('http') and config.has_option('http', dev):
+            options['http']['devices'][dev] = config.get('http', dev)
 
     # initialize logging from configuration file settings
     if args.log:
