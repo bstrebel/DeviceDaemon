@@ -135,12 +135,12 @@ if __name__ == '__main__':
         print("Device [%s] disappeared" % ping_device.address)
 
 
-    callback = {'new': evt_new, 'off': evt_off}
-    devices = ['127.0.0.1', 'sensor', 'htc', 'access']
+    #callback = {'new': evt_new, 'off': evt_off}
+    #devices = ['127.0.0.1', 'sensor', 'htc', 'access']
 
     options = { 'logger': logging.getLogger(),
                 'callback': {'new': evt_new, 'off': evt_off},
-                'devices': ['127.0.0.1', '172.16.0.1', '172.16.255.42']}
+                'devices': ['127.0.0.1', 'opti960', 'e6530']}
 
     discover = PingDiscoverDevice(options)
 

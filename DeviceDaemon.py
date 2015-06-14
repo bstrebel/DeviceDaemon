@@ -19,6 +19,7 @@ import argparse
 import ConfigParser
 import pprint
 
+# requires package python-daemon
 import daemon
 
 from DeviceLib.BluetoothDevice import BluetoothDiscoverDevice, BluetoothDevice
