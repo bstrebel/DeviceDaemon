@@ -18,6 +18,7 @@ import logging.config
 import argparse
 import ConfigParser
 import pprint
+import time
 
 # requires package python-daemon
 import daemon
@@ -94,7 +95,7 @@ class Controller():
 
         self._logger.info("Controller init ...")
 
-        self._ping['discover'] = PingDiscoverDevice(self._ping )
+        self._ping['discover'] = PingDiscoverDevice(self._ping)
         self._bluetooth['discover'] = BluetoothDiscoverDevice(self._bluetooth)
 
         self._pipe['discover'] = PipeDiscoverDevice(self._pipe)
@@ -106,6 +107,9 @@ class Controller():
         self._pipe['discover'].listen()
         self._http['discover'].listen()
 
+        # Create ping thread ...
+        # self._ping['discover'].discover()
+
         rf = [self._bluetooth['discover'], self._pipe['discover'].fifo, self._http['discover'].socket, ]
         self._bluetooth['discover'].find_devices()
 
@@ -113,21 +117,19 @@ class Controller():
 
             rfds = select.select(rf, [], [])[0]
 
-            if self._bluetooth['discover'] in rfds:
-                self._bluetooth['discover'].process_event()
-
             if self._pipe['discover'].fifo in rfds:
                 self._pipe['discover'].process_get_request()
 
             if self._http['discover'].socket in rfds:
                 self._http['discover'].httpd.handle_request()
 
+            if self._bluetooth['discover'] in rfds:
+                self._bluetooth['discover'].process_event()
+
             if self._bluetooth['discover'].done:
                 # time.sleep(1)
                 self._bluetooth['discover'].expired(self._bluetooth['expire'])
                 self._bluetooth['discover'].find_devices()
-
-            self._ping['discover'].discover()
 
 
     # signal handler called with signal number and stack frame
