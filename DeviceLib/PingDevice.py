@@ -73,7 +73,7 @@ class PingDevice(Device):
         if host is None:
             return False
 
-        result = self._ping(host)
+        result = PingDevice._ping(host)
         self.update()
         self._logger.debug('Ping device [%s] %s: %s' % (self._address, self._name, "Offline" if result is None else "Online"))
 
