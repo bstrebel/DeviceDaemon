@@ -236,11 +236,11 @@ def main():
                               'Daemon': False,
                               }
 
-    defaults['bluetooth'] = {'expire': 30}
-    defaults['ping'] = {'devices': '127.0.0.1'}
-    defaults['pipe'] = {'path': '/tmp/DeviceDaemon.fifo'}
-    defaults['http'] = {'host': '0.0.0.0', 'port': 8080, 'devices': None}
+    defaults['bluetooth'] = {'expire': 30, 'devices': []}
+    defaults['ping'] = {'sleep': 1, 'online': True, 'devices': []}
+    defaults['http'] = {'host': '0.0.0.0', 'port': 8080, 'devices': []}
 
+    defaults['pipe'] = {'path': '/tmp/DeviceDaemon.fifo'}
     defaults['pir'] = {}
 
     # read configuration files
@@ -267,7 +267,8 @@ def main():
         options['bluetooth']['expire'] = int(config.get('bluetooth', 'expire'))
 
     # create array from option string
-    options['ping']['devices'] = options['ping']['devices'].split(',')
+    _ping_devices = options['ping']['devices'].split(',')
+    options['ping']['devices'] = {}
 
     # create device hash from options
     _http_devices = options['http']['devices'].split(',')
