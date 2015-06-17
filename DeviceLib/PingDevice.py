@@ -28,7 +28,7 @@ class PingDevice(Device):
         if os.geteuid() == 0:
             # running as root => use python ICMP            '''
             try:
-                send_one_ping(self._socket, self._address, self._socket_id, self._psize)
+                send_one_ping(self._socket, self.address, self._socket_id, self._psize)
                 delay = receive_one_ping(self._socket, self._socket_id, self._timeout)
                 if delay is not None:
                     return True
@@ -38,7 +38,7 @@ class PingDevice(Device):
                 return None
         else:
             # running suid ping as non-root user
-            if subprocess.call(["ping", "-q", "-c1", "-W1", self._address], stdout=PingDevice._devnull,
+            if subprocess.call(["ping", "-q", "-c1", "-W1", self.address], stdout=PingDevice._devnull,
                                stderr=PingDevice._devnull) == 0:
                 return True
             else:
@@ -49,15 +49,36 @@ class PingDevice(Device):
             self._socket.close()
         except: pass
 
-    def __init__(self, logger, identifier, status, number):
+    def __init__(self, logger, number, device):
 
         self._logger = logger
-        self._status = status
+        self._socket_id = ( os.getpid() + number) & 0xFFFF
         self._socket = None
         self._icmp = None
-        self._psize = 64
-        self._timeout = 1
-        self._socket_id = ( os.getpid() + number) & 0xFFFF
+        self._psize = 64 if 'psize' not in device else device['psize']
+        self._timeout = 1 if 'timeout' not in device else device['timeout']
+
+# region check device ip/dns
+        if 'dns' in device and 'ip' not in device:
+            try:
+                device['ip'] = socket.gethostbyname(device['dns'])
+            except socket.error:
+                device['ip'] = None
+        elif 'ip' in device and 'dns' not in device:
+            try:
+                device['dns'] = socket.gethostbyaddr(device['ip'])[0]
+            except socket.error:
+                device['dns'] = None
+        elif 'ip' not in device and 'dns' not in device:
+            self._logger.error('Invalid specification for ping device [%s]' % (device['key']))
+            raise ValueError('IP address or DNS name is required for a ping device')
+# endregion
+
+        # self._address = device['ip']
+        # self._name = device['dns']
+        self._status = True if 'online' not in device else device['online']
+
+        Device.__init__(self, self._logger, device)
 
 # region socket initialization
         self._icmp = socket.getprotobyname("icmp")
@@ -71,81 +92,63 @@ class PingDevice(Device):
             raise # raise the original error
 # endregion
 
-        if self._pattern.match(identifier):
-            address = identifier
-            try:
-                name = socket.gethostbyaddr(address)[0]
-            except socket.error:
-                name = None
-        else:
-            name = identifier
-            try:
-                address = socket.gethostbyname(name)
-            except socket.error:
-                address = None
-
-        Device.__init__(self, logger=self._logger, address=address, name=name)
-
-    def check(self, callback):
+    def check(self):
         """
         Check IP device status with ICMP ping
         :param callback: dictionary of callback functions
         :return: True, if device is online
         """
-        host = None
-        if self._address is None:
-            host = self._name
-            try: address = socket.gethostbyname(self._name)
-            except: pass
-        else:
-            host = self._address
-
-        if host is None:
-            return False
-
         result = self._ping()
 
         if result is not None:
 
             self.update()
 
-            self._logger.debug('Ping device [%s] %s: %s' % (self._address, self._name, "Online" if result else "Offline"))
+            self._logger.debug('Ping device [%s] %s: %s' % (self.address, self.name, "Online" if result else "Offline"))
 
             if result is False:
                 # device offline
                 if (self._online is True) or (self._online is None and self._status is True):
-                    callback['off'](self)
+                        Device.callback(self,'off')
                 self._online = False
             else:
                 # device online
                 if (self._online is False) or (self._online is None and self._status is False):
-                    callback['new'](self)
+                    Device.callback(self,'new')
                 self._online = True
 
         return self._online
 
+    @property
+    def address(self): return self._config['ip']
+
+    @property
+    def name(self): return self._config['dns']
+
 
 class PingDiscoverDevice(threading.Thread):
 
-    def __init__(self, options, device):
+    def __init__(self, logger, device):
 
         threading.Thread.__init__(self)
-        self._tag = device
+        self._logger = logger
+
+        self._key = device['key']
         self._number = int(self.name.split('-',2)[1])
-        self._logger = options['logger']
-        self._callback = options['callback']
-        self._sleep = options['sleep']
-        self._device = PingDevice(self._logger, device, options['online'], self._number)
+        #self._callback = device['callback']
+        self._sleep = device['sleep']
+        self._device = PingDevice(self._logger, self._number, device)
 
     def run(self):
-        self._logger.info("Ping %s for [%s] started ..." % (self.name, self._tag))
+        self._logger.info("Ping %s for [%s] started ..." % (self.name, self._key))
         while not shutdown:
+            self._device.check()
             try:
-                self._device.check(self._callback)
                 time.sleep(self._sleep)
-            except: pass
+            except:
+                break
         self._device.done()
-        self._logger.info("Ping %s for [%s] stopped!" % (self.name, self._tag))
+        self._logger.info("Ping %s for [%s] stopped!" % (self.name, self._key))
 
 
 # region __main__
@@ -160,35 +163,48 @@ if __name__ == '__main__':
     # print(dev._online)
 
     def evt_new(ping_device):
+        assert isinstance(ping_device, PingDevice)
         print("Found new device [%s]" % ping_device.address)
 
     def evt_off(ping_device):
+        assert isinstance(ping_device, PingDevice)
         print("Device [%s] disappeared" % ping_device.address)
 
 
     # callback = {'new': evt_new, 'off': evt_off}
     # devices = ['127.0.0.1', 'sensor', 'htc', 'access']
 
-    options = { 'logger': logging.getLogger(),
-                'sleep': 10,
+    logger = logging.getLogger()
+
+    options = { 'sleep': 10,
+                'timeout': 1,
+                'psize': 64,
                 'online': True,
-                'callback': {'new': evt_new, 'off': evt_off},
-                'devices': ['localhost','access','opti960','easybox'],
-                'localhost': {'address': '127.0.0.1', 'sleep': 10, 'online': True},
-                'access': {'sleep': 3, 'online': False}}
+                'callback': {'new': 'evt_new', 'off': evt_off},
+                'devices': ['access','opti960','easybox']}
+
+    devices =   {   'access':  {'dns': 'access', 'sleep': 1,  'online': False},
+                    'opti960': {'dns': 'opti960', 'sleep': 1, 'online': False},
+                    'easybox': {'dns': 'easybox', 'sleep': 10, 'online': True}
+                }
 
     shutdown = False
     threads = []
 
     for device in options['devices']:
-        if device not in options:
-            options[device] = {}
-        for key in [ 'logger', 'sleep', 'callback', 'online']:
-            if key in options:
-                if key not in options[device]:
-                    options[device][key] = options[key]
 
-        thread = PingDiscoverDevice(options[device], device)
+        if device not in devices:
+            devices[device] = {}
+            devices[device]['dns'] = device
+
+        devices[device]['key'] = device
+
+        for key in ['psize', 'timeout', 'sleep', 'callback', 'online']:
+            if key in options:
+                if key not in devices[device]:
+                    devices[device][key] = options[key]
+
+        thread = PingDiscoverDevice(logger, devices[device])
         thread.start()
         threads.append(thread)
 
