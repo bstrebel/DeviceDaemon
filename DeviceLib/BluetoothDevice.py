@@ -34,22 +34,24 @@ class BluetoothDevice(Device):
 
     def __init__(self, *args, **kwargs):
 
-        self._logger = args[0]
+        #self._logger = args[0]
+        #self._callback = args[1]
         
-        if self._pattern.match(args[1]):
-            address = args[1]
-            if len(args) == 2:
-                name = self._get_bt_name(address)
+        if self._pattern.match(args[2]):
+            self._address = args[2]
+            if len(args) == 3:
+                self._name = self._get_bt_name(self._address)
             else:
-                name = args[2]
+                self._name = args[3]
         else:
-            name = args[1]
-            if len(args) == 2:
-                address = self._get_bt_address(name)
+            self._name = args[2]
+            if len(args) == 3:
+                self._address = self._get_bt_address(self._name)
             else:
-                address = args[2]
+                self._address = args[3]
 
-        Device.__init__(self, logger=self._logger, address=address, name=name)
+        #self._config = {'key': self._name}
+        Device.__init__(self, args[0], {'key': self._name, 'callback': args[1]})
 
     def check(self, callback):
         if self._get_bt_name(self._address) is None:
@@ -57,12 +59,18 @@ class BluetoothDevice(Device):
         self.update()
         return True
 
+    @property
+    def address(self): return self._address
+
+    @property
+    def name(self): return self._name
+
 
 class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
 
-    def __init__(self, options):
+    def __init__(self, logger, options, devices):
         
-        self._logger = options['logger']
+        self._logger = logger
         self._callback = options['callback']
         
         self._done = False
@@ -82,11 +90,10 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
 
         if address in self._devices:
             self._logger.debug("Bluetooth device update [%s] %s " % (address, name))
-            pass
         else:
             # self._logger.debug("New: %s" % name)
-            self._devices[address] = BluetoothDevice(self._logger, address, name)
-            self._callback['new'](self._devices[address])
+            self._devices[address] = BluetoothDevice(self._logger, self._callback, address, name)
+            Device.callback(self._devices[address],'new')
 
         self._devices[address].update()
         self._devices[address].online = True
@@ -103,7 +110,7 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
             if addr not in self._inquired:
                 if device.online:
                     self._logger.debug("Off: %s" % device.name)
-                    self._callback['off'](device)
+                    Device.callback(device,'off')
                     device.online = False
 
         self._done = True
@@ -136,15 +143,21 @@ if __name__ == '__main__':
     # print(dev._name)
 
     def evt_new(bt_device):
+        assert isinstance(bt_device, BluetoothDevice)
         print("Found new device [%s]" % bt_device.address)
 
     def evt_off(bt_device):
+        assert isinstance(bt_device, BluetoothDevice)
         print("Device [%s] disappeared" % bt_device.address)
 
-    options = { 'logger': logging.getLogger(), 'expire': 30,
+    logger = logging.getLogger()
+
+    options = { 'expire': 30,
                 'callback': {'new': evt_new, 'off': evt_off}}
 
-    discover = BluetoothDiscoverDevice(options)
+    devices = {}
+
+    discover = BluetoothDiscoverDevice(logger, options, devices)
     rf = [discover, ]
     discover.find_devices()
 
