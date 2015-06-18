@@ -29,7 +29,7 @@ class Device:
         if 'callback' in self._config and key in self._config['callback']:
             if callable(self._config['callback'][key]):
                 try:
-                    self._config['callback'][key](self)
+                    return self._config['callback'][key](self)
                 except:
                     self._logger.exception("Callback [%s] throwed exception!" % (self._config['callback'][key].__name__))
             else:
@@ -47,7 +47,7 @@ class Device:
         self._timestamp = time.time()
         # self._logger.debug("Timestamp: %d" % self._timestamp)
 
-    def config(self,key):
+    def config(self, key):
         if key in self._config:
             return self._config[key]
         return None
