@@ -153,9 +153,32 @@ if __name__ == '__main__':
     logger = logging.getLogger()
 
     options = { 'expire': 30,
+                'devices': ['nexus', 'htc'],
                 'callback': {'new': evt_new, 'off': evt_off}}
 
-    devices = {}
+    nexus = {
+
+        'display': 'Google Nexus 10',
+        'dns': 'nexus',
+        'ip': '192.168.100.60',
+        'serial': 'R32D102JR6N',
+        'wlan': '08:d4:2b:17:d8:e8',
+        'bt': '08:D4:2B:17:D8:E7',
+        'online': False
+    }
+
+    htc = {
+
+        'display': 'HTC One M7',
+        'dns': 'htc',
+        'ip': '192.168.2.50',
+        'serial': 'SH42NW901328',
+        'wlan': '50:2e:5c:cd:f4:54',
+        'bt': '00:EE:BD:52:83:B5',
+        'online': False
+    }
+
+    devices = {'nexus': nexus, 'htc': htc}
 
     discover = BluetoothDiscoverDevice(logger, options, devices)
     rf = [discover, ]
