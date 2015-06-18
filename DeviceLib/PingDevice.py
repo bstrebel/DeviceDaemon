@@ -45,9 +45,10 @@ class PingDevice(Device):
                 return None
 
     def done(self):
-        try:
-            self._socket.close()
-        except: pass
+        if ( self._socket is not None ):
+            try:
+                self._socket.close()
+            except: pass
 
     def __init__(self, logger, number, device):
 
@@ -80,16 +81,17 @@ class PingDevice(Device):
 
         Device.__init__(self, self._logger, device)
 
+        if os.geteuid() == 0:
 # region socket initialization
-        self._icmp = socket.getprotobyname("icmp")
-        try:
-            self._socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, self._icmp)
-        except socket.error, (errno, msg):
-            if errno == 1:
-                # Operation not permitted
-                msg += " - Note that ICMP messages can only be sent from processes"
-                raise socket.error(msg)
-            raise # raise the original error
+            self._icmp = socket.getprotobyname("icmp")
+            try:
+                self._socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, self._icmp)
+            except socket.error, (errno, msg):
+                if errno == 1:
+                    # Operation not permitted
+                    msg += " - Note that ICMP messages can only be sent from processes"
+                    raise socket.error(msg)
+                raise # raise the original error
 # endregion
 
     def check(self):
@@ -109,12 +111,12 @@ class PingDevice(Device):
             if result is False:
                 # device offline
                 if (self._online is True) or (self._online is None and self._status is True):
-                        Device.callback(self,'off')
+                        Device.callback(self, 'off')
                 self._online = False
             else:
                 # device online
                 if (self._online is False) or (self._online is None and self._status is False):
-                    Device.callback(self,'new')
+                    Device.callback(self, 'new')
                 self._online = True
 
         return self._online
@@ -180,8 +182,8 @@ if __name__ == '__main__':
                 'timeout': 1,
                 'psize': 64,
                 'online': True,
-                'callback': {'new': 'evt_new', 'off': evt_off},
-                'devices': ['access','opti960','easybox']}
+                'callback': {'new': evt_new, 'off': evt_off},
+                'devices': ['easybox', 'access', 'opti960']}
 
     devices =   {   'access':  {'dns': 'access', 'sleep': 1,  'online': False},
                     'opti960': {'dns': 'opti960', 'sleep': 1, 'online': False},
