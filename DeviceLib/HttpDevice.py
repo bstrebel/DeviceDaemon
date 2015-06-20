@@ -138,6 +138,8 @@ class HttpDiscoverDevice:
         if self._httpd is not None:
             self.close()
 
+        self._logger.info("Http: Listening at port %s for zone update requests ..." % self._port)
+
         self._httpd = HttpServer((self._host, self._port), HttpRequestHandler, self)
         self._socket = self._httpd.socket;
 
@@ -154,6 +156,7 @@ class HttpDiscoverDevice:
         if self._httpd is not None:
             self._httpd.server_close()
             self._httpd = None
+            self._logger.info("Http: Closed socket for port %s" % self._port)
 
     @property
     def httpd(self):

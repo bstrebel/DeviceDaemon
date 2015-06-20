@@ -174,7 +174,7 @@ class PingDiscoverDevice():
                     if key not in self._devices[device]:
                         self._devices[device][key] = self._options[key]
 
-            thread = PingDevice(logger, devices[device])
+            thread = PingDevice(self._logger, self._devices[device])
             thread.start()
             self._threads.append(thread)
 

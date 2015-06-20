@@ -79,6 +79,7 @@ class PipeRequest:
             os.mkfifo(self._fifo_name)
 
         self._fifo = os.open(self._fifo_name, os.O_RDONLY|os.O_NONBLOCK)
+        self._logger.info("Pipe: Listening at %s for pipe requests ..." % self._fifo_name)
 
     def close(self):
 
@@ -88,6 +89,8 @@ class PipeRequest:
 
         if os.path.exists(self._fifo_name):
             os.unlink(self._fifo_name)
+
+        self._logger.info("Pipe: Closed device %s" % self._fifo_name)
 
     def process_event(self):
 
@@ -149,9 +152,9 @@ class Controller():
         self._logger.info(message)
         return 200, message
 
-    def http_get_request(self, request, handler):
+    def http_get_request(self,request, handler):
         assert isinstance(handler, HttpRequestHandler)
-        self._logger("Http request: [%s]" % handler.path)
+        self._logger.info("Http request: [%s]" % handler.path)
         return 200, "Path: %s" % handler.path
 
     def pipe_request(self, buffer):
@@ -210,7 +213,7 @@ class Controller():
             rfds = select.select(rf, [], [])[0]
 
             if self._pipe['discover'].fifo in rfds:
-                self._pipe['discover'].process_get_request()
+                self._pipe['discover'].process_event()
 
             if self._http['discover'].socket in rfds:
                 self._http['discover'].httpd.handle_request()
@@ -449,10 +452,9 @@ def main():
     else:
         try:
             controller.run()
-        except KeyboardInterrupt:
+        except:
             sys.stderr.write("\n")
             controller.exit()
-
     exit(0)
 
 # region __Main__
