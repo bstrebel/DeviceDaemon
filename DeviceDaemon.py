@@ -18,7 +18,9 @@ import logging.config
 import argparse
 from ConfigParser import SafeConfigParser
 import pprint
+import threading
 import time
+import platform
 
 # requires package python-daemon
 import daemon
@@ -28,8 +30,8 @@ from DeviceLib.BluetoothDevice import BluetoothDiscoverDevice, BluetoothDevice
 from DeviceLib.PingDevice import PingDiscoverDevice, PingDevice
 from DeviceLib.HttpDevice import HttpDiscoverDevice, HttpDevice, HttpRequestHandler
 
-class DefaultConfigParser(SafeConfigParser):
 
+class DefaultConfigParser(SafeConfigParser):
     def __init__(self, defaults):
 
         self._section_defaults = defaults;
@@ -54,8 +56,8 @@ class DefaultConfigParser(SafeConfigParser):
         else:
             return value
 
-class PipeRequest:
 
+class PipeRequest:
     def __init__(self, logger, options):
 
         self._logger = logger
@@ -78,7 +80,7 @@ class PipeRequest:
         if not os.path.exists(self._fifo_name):
             os.mkfifo(self._fifo_name)
 
-        self._fifo = os.open(self._fifo_name, os.O_RDONLY|os.O_NONBLOCK)
+        self._fifo = os.open(self._fifo_name, os.O_RDONLY | os.O_NONBLOCK)
         self._logger.info("Pipe: Listening at %s for pipe requests ..." % self._fifo_name)
 
     def close(self):
@@ -100,25 +102,66 @@ class PipeRequest:
         if not self._buffer:
             # select() returns True until close and re-open of the pipe !?
             os.close(self._fifo)
-            self._fifo = os.open(self._fifo_name, os.O_RDONLY|os.O_NONBLOCK)
+            self._fifo = os.open(self._fifo_name, os.O_RDONLY | os.O_NONBLOCK)
         else:
             self._buffer = self._buffer.rstrip()
             if self._buffer:
                 self._callback['request'](self._buffer)
 
-        # return self._buffer
+                # return self._buffer
 
     @property
-    def fifo(self): return self._fifo
+    def fifo(self):
+        return self._fifo
 
     @property
-    def fifo_name(self): return self._fifo_name
+    def fifo_name(self):
+        return self._fifo_name
+
+
+class PirMotionDetection(threading.Thread):
+
+    def __init__(self, logger, options):
+
+        threading.Thread.__init__(self)
+        self._logger = logger
+        self._callback = options['callback']
+        self._timeout = options['timeout']
+        self._counter = self._timeout
+        self._motion = True
+        self._shutdown = False
+
+    def motion(self):
+
+        self._counter = self._timeout
+        self._motion = True
+        self._callback['motion']()
+
+    def run(self):
+
+        self._logger.info("Pir detection started with timeout of %d seconds ..." % self._timeout)
+
+        while not self._shutdown and self._counter > 0:
+
+            self._counter -= 1
+
+            if self._counter == 0:
+                self._counter = self._timeout
+                if self._motion:
+                    self._motion = False
+                    self._callback['idle']()
+
+            time.sleep(1)
+
+        self.logger.info("Pir detection stopped!")
+
+    def shutdown(self):
+        self._shutdown = True
 
 
 class Controller():
-
     def callback(self, device):
-        assert(isinstance(device,Device))
+        assert (isinstance(device, Device))
         self._logger.warn("Generic callback for device [%s]. Check configuration!" % device.key)
 
     def bluetooth_new(self, bt_device):
@@ -147,12 +190,12 @@ class Controller():
 
     def http_zone_changed(self, http_device):
         assert isinstance(http_device, HttpDevice)
-        message = "Device %s with serial %s %s zone %s" %\
-                  (http_device.name, http_device.serial,"entered" if http_device.update else "left", http_device.zone)
+        message = "Device %s with serial %s %s zone %s" % \
+                  (http_device.name, http_device.serial, "entered" if http_device.update else "left", http_device.zone)
         self._logger.info(message)
         return 200, message
 
-    def http_get_request(self,request, handler):
+    def http_get_request(self, request, handler):
         assert isinstance(handler, HttpRequestHandler)
         self._logger.info("Http request: [%s]" % handler.path)
         return 200, "Path: %s" % handler.path
@@ -161,9 +204,17 @@ class Controller():
         assert isinstance(buffer, str)
         self._logger.info("Pipe request: [%s]" % buffer)
 
+    def pir_motion(self):
+        self._logger.info("Pir motion detected!")
+
+    def pir_idle(self):
+        self._logger.info("Pir idle since %d seconds" % self._timeout)
+
     def __init__(self, logger, options, devices):
 
         self._logger = logger
+        assert isinstance(logger, logging.Logger)
+
         self._options = options
         self._devices = devices
 
@@ -172,60 +223,124 @@ class Controller():
         self._root = options['controller']['root']
 
         self._ping = options['ping']
+        self._ping['discover'] = None
         self._ping['logger'] = self._logger
         self._ping['callback'] = {'new': self.ping_new, 'off': self.ping_off}
 
         self._bluetooth = options['bluetooth']
+        self._bluetooth['discover'] = None
         self._bluetooth['logger'] = self._logger
         self._bluetooth['callback'] = {'new': self.bluetooth_new, 'off': self.bluetooth_off}
 
         self._pipe = options['pipe']
+        self._pipe['discover'] = None
         self._pipe['logger'] = self._logger
         self._pipe['callback'] = {'request': self.pipe_request}
 
         self._http = options['http']
+        self._http['discover'] = None
         self._http['logger'] = self._logger
         self._http['callback'] = {'update': self.http_zone_changed, 'request': self.http_get_request}
+
+        self._pir = options['pir']
+        self._pir['discover'] = None
+        self._pir['logger'] = self._logger
+        self._pir['callback'] = {'motion': self.pir_motion, 'idle': self.pir_idle}
 
     def init(self):
 
         self._logger.info("Controller init ...")
 
-        self._ping['discover'] = PingDiscoverDevice(self._logger, self._ping, self._devices)
-        self._bluetooth['discover'] = BluetoothDiscoverDevice(self._logger, self._bluetooth, self._devices)
+        if self._bluetooth['enabled']:
 
-        self._http['discover'] = HttpDiscoverDevice(self._logger, self._http, self._devices)
+            try:
+                import bluetooth
 
-        self._pipe['discover'] = PipeRequest(self._logger, self._pipe)
+                bluetooth.discover_devices()
+            except ImportError:
+                self._logger.error("Error loading library. Bluetooth module disabled!")
+                self._bluetooth['enabled'] = False
+            except bluetooth.BluetoothError:
+                self._logger.error("Error accessing socket. Bluetooth module disabled!")
+                self._bluetooth['enabled'] = False
+
+        if self._pir['enabled']:
+
+            if platform.machine().startswith("arm"):
+                try:
+                    import RPi.GPIO as GPIO
+                except ImportError:
+                    self._logger.error("Error loading library. GPIO based pir detectio disabled!")
+                    self._pir['enabled'] = False
+            else:
+                self._logger.error("Pir module detection not avalaible on %s architecture!" % platform.machine())
+                self._pir['enabled'] = False
+
+        if self._bluetooth['enabled']:
+            self._bluetooth['discover'] = BluetoothDiscoverDevice(self._logger, self._bluetooth, self._devices)
+
+        if self._pir['enabled']:
+            self._pir['discover'] = PirMotionDetection(self._logger, self._pir)
+
+        if self._ping['enabled']:
+            self._ping['discover'] = PingDiscoverDevice(self._logger, self._ping, self._devices)
+
+        if self._http['enabled']:
+            self._http['discover'] = HttpDiscoverDevice(self._logger, self._http, self._devices)
+
+        if self._pipe['enabled']:
+            self._pipe['discover'] = PipeRequest(self._logger, self._pipe)
 
     def run(self):
 
-        self._pipe['discover'].listen()
 
-        self._ping['discover'].listen()
-        self._http['discover'].listen()
+        if self._ping['discover']:
+            self._ping['discover'].listen()
 
-        rf = [self._bluetooth['discover'], self._pipe['discover'].fifo, self._http['discover'].socket, ]
-        self._bluetooth['discover'].find_devices()
+        if self._pir['discover']:
+            import RPi.GPIO as GPIO
+            pin = self._pir['gpio']
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            GPIO.add_event_detect(pin, GPIO.RISING)
+            self._pir['discover'].run()
+            GPIO.add_event_callback(pin, self._pir['discover'].motion)
+
+        rf = []
+        if self._pipe['discover']:
+            self._pipe['discover'].listen()
+            rf.append(self._pipe['discover'].fifo)
+
+        if self._http['discover']:
+            self._http['discover'].listen()
+            rf.append(self._http['discover'].socket)
+
+        if self._bluetooth['discover']:
+            rf.append(self._bluetooth['discover'])
+            self._bluetooth['discover'].find_devices()
+
+        # rf = [self._bluetooth['discover'], self._pipe['discover'].fifo, self._http['discover'].socket, ]
 
         while True:
 
             rfds = select.select(rf, [], [])[0]
 
-            if self._pipe['discover'].fifo in rfds:
-                self._pipe['discover'].process_event()
+            if self._pipe['discover']:
+                if self._pipe['discover'].fifo in rfds:
+                    self._pipe['discover'].process_event()
 
-            if self._http['discover'].socket in rfds:
-                self._http['discover'].httpd.handle_request()
+            if self._http['discover']:
+                if self._http['discover'].socket in rfds:
+                    self._http['discover'].httpd.handle_request()
 
-            if self._bluetooth['discover'] in rfds:
-                self._bluetooth['discover'].process_event()
+            if self._bluetooth['discover']:
+                if self._bluetooth['discover'] in rfds:
+                    self._bluetooth['discover'].process_event()
 
-            if self._bluetooth['discover'].done:
-                # time.sleep(1)
-                self._bluetooth['discover'].expired(self._bluetooth['expire'])
-                self._bluetooth['discover'].find_devices()
-
+                if self._bluetooth['discover'].done:
+                    # time.sleep(1)
+                    self._bluetooth['discover'].expired(self._bluetooth['expire'])
+                    self._bluetooth['discover'].find_devices()
 
     # signal handler called with signal number and stack frame
     def reload(self, *args):
@@ -233,26 +348,44 @@ class Controller():
         self._logger.debug(args)
 
     def exit(self, *args):
+
         self._logger.info("Controller exit ...")
-        self._ping['discover'].shutdown()
-        self._pipe['discover'].close()
-        self._http['discover'].close()
+
+        if self._pir['discover']:
+            import RPi.GPIO as GPIO
+            pin = self._pir['gpio']
+            GPIO.remove_event_detect(pin, GPIO.RISING)
+            GPIO.cleanup(pin)
+            self._pir['discover'].shutdown()
+
+        if self._ping['discover']:
+            self._ping['discover'].shutdown()
+
+        if self._pipe['discover']:
+            self._pipe['discover'].close()
+
+        if self._http['discover']:
+            self._http['discover'].close()
+
         exit(0)
 
     def request(self, *args):
         pass
 
     @property
-    def options(self): return self._options
+    def options(self):
+        return self._options
 
     @property
-    def logger(self): return self._logger
+    def logger(self):
+        return self._logger
 
     @property
-    def root(self): return self._root
+    def root(self):
+        return self._root
+
 
 def daemonize(controller):
-
     # search log file handle: preserve file handler
     handle = None
     for handle in controller.logger.handlers:
@@ -291,9 +424,8 @@ def daemonize(controller):
 
 
 def main():
-
     def callback(self, device):
-        assert(isinstance(device,Device))
+        assert (isinstance(device, Device))
         self._logger.warn("Generic callback for device [%s]. Check configuration!" % device.key)
 
     home = os.path.expanduser('~')
@@ -310,7 +442,7 @@ def main():
     parser.add_argument('-r', '--root', type=str, help='daemon root directory')
     parser.add_argument('-c', '--config', type=str, help='alternate configuration file')
     parser.add_argument('-i', '--ignore', action='store_true', help='ignore default configuration file(s)')
-    parser.add_argument(      '--log', type=str, help='alternate logging configuration file')
+    parser.add_argument('--log', type=str, help='alternate logging configuration file')
     parser.add_argument('-l', '--loglevel', type=str,
                         choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL',
                                  'debug', 'info', 'warn', 'warning', 'error', 'critical'],
@@ -338,22 +470,29 @@ def main():
                   'loglevel': 'DEBUG',
                   'Daemon': False}
 
-    bluetooth = {'expire': 30,
+    bluetooth = {'enabled': True,
+                 'expire': 30,
                  'devices': []}
 
-    ping = {'sleep': 10,
+    ping = {'enabled': True,
+            'sleep': 10,
             'timeout': 1,
             'psize': 64,
             'online': True,
             'devices': []}
 
-    http = {'host': '0.0.0.0',
+    http = {'enabled': True,
+            'host': '0.0.0.0',
             'port': 8080,
             'key': 'serial',
             'devices': []}
 
-    pipe = {'path': '/tmp/DeviceDaemon.fifo'}
-    pir = {}
+    pipe = {'enabled': True,
+            'path': '/tmp/DeviceDaemon.fifo'}
+
+    pir = {'enabled': True,
+           'gpio': 7,
+           'timeout': 60}
 
     defaults = {'controller': controller,
                 'bluetooth': bluetooth,
@@ -385,9 +524,9 @@ def main():
     for sec in dev_cfg.sections():
         devices[sec] = {}
         for opt in dev_cfg.options(sec):
-            devices[sec][opt] = dev_cfg.get(sec,opt)
+            devices[sec][opt] = dev_cfg.get(sec, opt)
 
-    #        if config.has_section(sec):
+    # if config.has_section(sec):
     #            if config.has_option(sec,key):
     #                options[sec][key] = config.get(sec,key)
 
@@ -436,7 +575,7 @@ def main():
             if type(handle) is logging.StreamHandler:
                 logger.removeHandler(handle)
 
-        # sys.stderr.write("Running DeviceDaemon in background ...\n")
+                # sys.stderr.write("Running DeviceDaemon in background ...\n")
 
     logger.info("Initializing device demon [%s] ..." % os.path.basename(sys.argv[0]))
     logger.info("args: %s" % ' '.join(sys.argv[1:]))
@@ -460,7 +599,6 @@ def main():
 # region __Main__
 if __name__ == '__main__':
     main()
-
 
     """
     home = os.path.expanduser("~") + "/.DeviceDaemon"
