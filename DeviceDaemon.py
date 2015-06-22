@@ -43,19 +43,34 @@ class DefaultConfigParser(SafeConfigParser):
             self.add_section(section)
 
         if not self.has_option(section, option) and option in self._section_defaults[section]:
-            try:
-                self.set(section, option, self._section_defaults[section][option])
-            except:
-                return self._section_defaults[section][option]
+            self.set(section, option, str(self._section_defaults[section][option]))
 
-        value = SafeConfigParser.get(self, section, option)
-        delimiter = ','
+        if section in self._section_defaults and option in self._section_defaults[section]:
 
-        if isinstance(self._section_defaults[section][option], list):
-            return value.split(delimiter)
-        else:
-            return value
+            if isinstance(self._section_defaults[section][option], str):
+                return SafeConfigParser.get(self, section, option)
 
+            elif isinstance(self._section_defaults[section][option], bool):
+                value = SafeConfigParser.get(self, section, option).lower()
+                if value == "true" or value == "on" or value == "1":
+                    return True
+                else:
+                    return False
+
+            elif isinstance(self._section_defaults[section][option], int):
+                return int(SafeConfigParser.get(self, section, option))
+
+            # elif isinstance(self._section_defaults[section][option], float):
+            #    return self.getfloat(section, option)
+
+            elif isinstance(self._section_defaults[section][option], list):
+                delimiter = ','
+                return SafeConfigParser.get(self, section, option).split(delimiter)
+
+            else:
+                raise TypeError("Option type %s not supported" % type(self._section_defaults[section][option]))
+
+        return SafeConfigParser.get(self, section, option)
 
 class PipeRequest:
     def __init__(self, logger, options):
@@ -131,11 +146,11 @@ class PirMotionDetection(threading.Thread):
         self._motion = True
         self._shutdown = False
 
-    def motion(self):
+    def motion(self, pin):
 
         self._counter = self._timeout
         self._motion = True
-        self._callback['motion']()
+        self._callback['motion'](pin)
 
     def run(self):
 
@@ -153,7 +168,7 @@ class PirMotionDetection(threading.Thread):
 
             time.sleep(1)
 
-        self.logger.info("Pir detection stopped!")
+        self._logger.info("Pir detection stopped!")
 
     def shutdown(self):
         self._shutdown = True
@@ -204,11 +219,11 @@ class Controller():
         assert isinstance(buffer, str)
         self._logger.info("Pipe request: [%s]" % buffer)
 
-    def pir_motion(self):
+    def pir_motion(self, pin):
         self._logger.info("Pir motion detected!")
 
     def pir_idle(self):
-        self._logger.info("Pir idle since %d seconds" % self._timeout)
+        self._logger.info("Pir idle since %d seconds" % self._pir['timeout'])
 
     def __init__(self, logger, options, devices):
 
@@ -303,8 +318,8 @@ class Controller():
             GPIO.setmode(GPIO.BOARD)
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
             GPIO.add_event_detect(pin, GPIO.RISING)
-            self._pir['discover'].run()
             GPIO.add_event_callback(pin, self._pir['discover'].motion)
+            self._pir['discover'].start()
 
         rf = []
         if self._pipe['discover']:
@@ -351,13 +366,6 @@ class Controller():
 
         self._logger.info("Controller exit ...")
 
-        if self._pir['discover']:
-            import RPi.GPIO as GPIO
-            pin = self._pir['gpio']
-            GPIO.remove_event_detect(pin, GPIO.RISING)
-            GPIO.cleanup(pin)
-            self._pir['discover'].shutdown()
-
         if self._ping['discover']:
             self._ping['discover'].shutdown()
 
@@ -366,6 +374,13 @@ class Controller():
 
         if self._http['discover']:
             self._http['discover'].close()
+
+        if self._pir['discover']:
+            import RPi.GPIO as GPIO
+            pin = self._pir['gpio']
+            GPIO.remove_event_detect(pin)
+            GPIO.cleanup(pin)
+            self._pir['discover'].shutdown()
 
         exit(0)
 
@@ -438,7 +453,7 @@ def main():
     # command line arguments
     parser = argparse.ArgumentParser(description='Python Device Daemon Rev. 0.1 (c) Bernd Strebel')
     parser.add_argument('-v', '--verbose', action='count', help='increasy verbosity')
-    parser.add_argument('-D', '--Daemon', action='store_true', help='run in background')
+    parser.add_argument('-D', '--daemon', action='store_true', help='run in background')
     parser.add_argument('-r', '--root', type=str, help='daemon root directory')
     parser.add_argument('-c', '--config', type=str, help='alternate configuration file')
     parser.add_argument('-i', '--ignore', action='store_true', help='ignore default configuration file(s)')
@@ -468,7 +483,7 @@ def main():
                   'log': root + '/logging.cfg',
                   'dev': root + '/devices.cfg',
                   'loglevel': 'DEBUG',
-                  'Daemon': False}
+                  'daemon': False}
 
     bluetooth = {'enabled': True,
                  'expire': 30,
@@ -513,10 +528,13 @@ def main():
 
     # get options from environment and/or configuration files
     for sec in defaults:
+        print(sec)
         options[sec] = {}
         for key in defaults[sec]:
-            environment = os.getenv('DEVICE_DAEMON_' + sec.upper() + '_' + key.upper(), defaults[sec][key])
-            options[sec][key] = environment if environment else config.get(sec, key)
+            print(key)
+            env_key = 'DEVICE_DAEMON_' + sec.upper() + '_' + key.upper()
+            env_val = os.getenv(env_key)
+            options[sec][key] = env_val if env_val else config.get(sec, key)
 
     # get device configuration options
     dev_cfg = SafeConfigParser()
@@ -565,9 +583,9 @@ def main():
     if new_level:
         logger.setLevel(new_level)
 
-    if args.Daemon:
+    if args.daemon:
 
-        options['controller']['Daemon'] = True
+        options['controller']['daemon'] = True
 
         # search log file handle: close console handlers
         handle = None
@@ -586,12 +604,13 @@ def main():
     controller = Controller(logger, options, devices)
     controller.init()
 
-    if options['controller']['Daemon']:
+    if options['controller']['daemon']:
         daemonize(controller)
     else:
         try:
             controller.run()
-        except:
+        except Exception, e:
+            logger.exception(e)
             sys.stderr.write("\n")
             controller.exit()
     exit(0)
