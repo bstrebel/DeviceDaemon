@@ -530,10 +530,8 @@ def main():
 
     # get options from environment and/or configuration files
     for sec in defaults:
-        print(sec)
         options[sec] = {}
         for key in defaults[sec]:
-            print(key)
             env_key = 'DEVICE_DAEMON_' + sec.upper() + '_' + key.upper()
             env_val = os.getenv(env_key)
             options[sec][key] = env_val if env_val else config.get(sec, key)
