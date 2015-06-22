@@ -143,14 +143,16 @@ class PirMotionDetection(threading.Thread):
         self._callback = options['callback']
         self._timeout = options['timeout']
         self._counter = self._timeout
-        self._motion = True
+        self._motion = None
         self._shutdown = False
 
     def motion(self, pin):
 
         self._counter = self._timeout
-        self._motion = True
-        self._callback['motion'](pin)
+
+        if self._motion is None or not self._motion:
+            self._motion = True
+            self._callback['motion'](pin)
 
     def run(self):
 
@@ -162,7 +164,7 @@ class PirMotionDetection(threading.Thread):
 
             if self._counter == 0:
                 self._counter = self._timeout
-                if self._motion:
+                if self._motion is None or self._motion:
                     self._motion = False
                     self._callback['idle']()
 
