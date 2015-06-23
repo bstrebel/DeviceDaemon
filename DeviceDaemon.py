@@ -183,12 +183,13 @@ class Controller():
 
     def bluetooth_new(self, bt_device):
         assert isinstance(bt_device, BluetoothDevice)
-        self._logger.info('Found new bluetooth device [%s] %s' % (bt_device.address, bt_device.name))
+        self._logger.info('Discovered %s bluetooth device [%s] %s' % ("known" if bt_device.known else "unknown",
+                                                                      bt_device.address, bt_device.name))
 
     def bluetooth_off(self, bt_device):
         assert isinstance(bt_device, BluetoothDevice)
-        self._logger.info('Bluetooth device disappeared [%s] %s' % (bt_device.address, bt_device.name))
-
+        self._logger.info('%s bluetooth device disappeared [%s] %s' % ("Known" if bt_device.known else "Unknown",
+                                                                       bt_device.address, bt_device.name))
     def ping_new(self, ping_device):
         assert isinstance(ping_device, PingDevice)
         if ping_device.online is None:
@@ -351,6 +352,7 @@ class Controller():
                     self._http['discover'].httpd.handle_request()
 
             if self._bluetooth['discover']:
+
                 if self._bluetooth['discover'] in rfds:
                     self._bluetooth['discover'].process_event()
 
@@ -488,7 +490,7 @@ def main():
                   'daemon': False}
 
     bluetooth = {'enabled': True,
-                 'expire': 30,
+                 'expire': 300,
                  'devices': []}
 
     ping = {'enabled': True,
@@ -544,26 +546,6 @@ def main():
         for opt in dev_cfg.options(sec):
             devices[sec][opt] = dev_cfg.get(sec, opt)
 
-    # if config.has_section(sec):
-    #            if config.has_option(sec,key):
-    #                options[sec][key] = config.get(sec,key)
-
-    # check an convert bluetooth expiration time
-    # if config.has_section('bluetooth') and config.has_option('bluetooth', 'expire'):
-    #    options['bluetooth']['expire'] = int(config.get('bluetooth', 'expire'))
-
-    # create array from option string
-    # _ping_devices = options['ping']['devices'].split(',')
-    # options['ping']['devices'] = {}
-
-    # create device hash from options
-    # _http_devices = options['http']['devices'].split(',')
-    # options['http']['devices'] = {}
-    # for dev in _http_devices:
-    #     if config.has_section('http') and config.has_option('http', dev):
-    #         options['http']['devices'][dev] = config.get('http', dev)
-
-    # initialize logging from configuration file settings
     if args.log:
         options['controller']['log'] = args.log
 

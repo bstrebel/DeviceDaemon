@@ -16,8 +16,9 @@ class Device:
         self._logger = logger
         self._key = config['key']
 
-        #self._address = address
-        #self._name = name
+        # self._address = address
+        # self._name = name
+
         self._timestamp = 0
         self._online = None
         self._zone = None
@@ -61,7 +62,7 @@ class Device:
 
     # @property
     # def address(self): return self._address
-
+    #
     # @property
     # def name(self): return self._name
 
