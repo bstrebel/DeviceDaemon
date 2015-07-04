@@ -7,6 +7,7 @@
 
 import logging
 import time
+import copy
 
 class Device:
 
@@ -27,6 +28,7 @@ class Device:
         self._config = config
 
     def callback(self, key):
+
         if 'callback' in self._config and key in self._config['callback']:
             if callable(self._config['callback'][key]):
                 try:
@@ -46,7 +48,6 @@ class Device:
 
     def update(self):
         self._timestamp = time.time()
-        # self._logger.debug("Timestamp: %d" % self._timestamp)
 
     def config(self, key):
         if key in self._config:

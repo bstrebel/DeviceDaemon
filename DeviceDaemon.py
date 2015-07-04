@@ -177,6 +177,7 @@ class PirMotionDetection(threading.Thread):
 
 
 class Controller():
+
     def callback(self, device):
         assert (isinstance(device, Device))
         self._logger.warn("Generic callback for device [%s]. Check configuration!" % device.key)
@@ -190,6 +191,7 @@ class Controller():
         assert isinstance(bt_device, BluetoothDevice)
         self._logger.info('%s bluetooth device disappeared [%s] %s' % ("Known" if bt_device.known else "Unknown",
                                                                        bt_device.address, bt_device.name))
+
     def ping_new(self, ping_device):
         assert isinstance(ping_device, PingDevice)
         if ping_device.online is None:
@@ -311,7 +313,6 @@ class Controller():
 
     def run(self):
 
-
         if self._ping['discover']:
             self._ping['discover'].listen()
 
@@ -370,9 +371,6 @@ class Controller():
 
         self._logger.info("Controller exit ...")
 
-        if self._ping['discover']:
-            self._ping['discover'].shutdown()
-
         if self._pipe['discover']:
             self._pipe['discover'].close()
 
@@ -385,6 +383,10 @@ class Controller():
             GPIO.remove_event_detect(pin)
             GPIO.cleanup(pin)
             self._pir['discover'].shutdown()
+
+        if self._ping['discover']:
+            self._logger.info("Notify ping threads. Please wait ...")
+            self._ping['discover'].shutdown()
 
         exit(0)
 
@@ -543,6 +545,7 @@ def main():
     dev_cfg.read(options['controller']['dev'])
     for sec in dev_cfg.sections():
         devices[sec] = {}
+        devices[sec]['key'] = sec
         for opt in dev_cfg.options(sec):
             devices[sec][opt] = dev_cfg.get(sec, opt)
 
@@ -581,7 +584,8 @@ def main():
     logger.info("args: %s" % ' '.join(sys.argv[1:]))
 
     pp = pprint.PrettyPrinter()
-    logger.info(pp.pformat(options))
+    logger.debug(pp.pformat(options))
+    logger.debug(pp.pformat(devices))
 
     controller = Controller(logger, options, devices)
     controller.init()
@@ -591,14 +595,18 @@ def main():
     else:
         try:
             controller.run()
+        except KeyboardInterrupt:
+            logger.info("KeyboardInterrupt!")
         except Exception, e:
             logger.exception(e)
-            sys.stderr.write("\n")
+        finally:
             controller.exit()
+
     exit(0)
 
 # region __Main__
 if __name__ == '__main__':
+
     main()
 
     """

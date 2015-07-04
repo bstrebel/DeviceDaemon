@@ -10,6 +10,7 @@ __author__ = 'bst'
 import bluetooth
 import select
 import re
+import copy
 
 from Device import *
 
@@ -32,13 +33,12 @@ class BluetoothDevice(Device):
                 return a
         return None
 
-    def __init__(self, logger, device, name):
+    def __init__(self, logger, config, name):
 
         self._logger = logger
-        self._address = device['bt']
+        self._address = config['bt']
         self._name = name
-
-        Device.__init__(self, logger, device)
+        Device.__init__(self, logger, config)
 
     def check(self, callback):
         if self._get_bt_name(self._address) is None:
@@ -67,14 +67,12 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
         
         self._done = False
         self._inquired = []
+        self._devices = {}
 
         self._known = {}
         for device in options['devices']:
             if device in devices and 'bt' in devices[device]:
-                devices[device]['key'] = device
                 self._known[devices[device]['bt']] = devices[device]
-
-        self._devices = {}
 
     def pre_inquiry(self):
         self._logger.debug("Starting bluetooth inquiry ...")
@@ -94,7 +92,7 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
             device = {}
 
             if address in self._known:
-                device = self._known[address]
+                device = copy.deepcopy(self._known[address])
             else:
                 device = {'key': address, 'bt': address, 'display': name}
 
@@ -104,17 +102,20 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
             self._devices[address].update()
             self._devices[address].online = True
             self._devices[address].callback('new')
+            # Device.callback(self._devices[address],'new')
 
     def inquiry_complete(self):
 
         self._logger.debug("Bluetooth inquiry completed")
 
-        for addr, device in self._devices.items():
+        for addr in self._devices:
             if addr not in self._inquired:
+                device = self._devices[addr]
                 self._logger.debug("Offline [%s] %s" % ( device.address, device.name))
                 if device.online:
                     device.online = False
                     device.callback('off')
+                    # Device.callback(device, 'off')
 
         self._done = True
 
@@ -125,7 +126,7 @@ class BluetoothDiscoverDevice(bluetooth.DeviceDiscoverer):
 
         for addr, device in self._devices.items():
             if device.age > seconds:
-                self._logger.debug("Expired [%s] %s" % (device.address, device.name))
+                self._logger.info("Expired [%s] %s" % (device.address, device.name))
                 del device
                 del self._devices[addr]
 
@@ -163,6 +164,7 @@ if __name__ == '__main__':
 
     nexus = {
 
+        'key': 'nexus',
         'display': 'Google Nexus 10',
         'dns': 'nexus',
         'ip': '192.168.100.60',
@@ -174,6 +176,7 @@ if __name__ == '__main__':
 
     htc = {
 
+        'key': 'htc',
         'display': 'HTC One M7',
         'dns': 'htc',
         'ip': '192.168.2.50',

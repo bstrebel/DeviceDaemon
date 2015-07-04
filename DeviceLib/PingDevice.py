@@ -14,6 +14,7 @@ import socket
 import threading
 import requests
 import random
+import copy
 
 from Device import *
 from ping import send_one_ping, receive_one_ping, do_one
@@ -50,8 +51,13 @@ class PingDevice(Device, threading.Thread):
             except socket.error:
                 device['dns'] = None
         elif 'ip' not in device and 'dns' not in device:
-            self._logger.error('Invalid specification for ping device [%s]' % (device['key']))
+            # self._logger.error('Invalid specification for ping device [%s]' % (device['key']))
             raise ValueError('IP address or DNS name is required for a ping device')
+
+        if device['ip'] is None:
+            # self._logger.error('Cannot determin IP address for device [%s]' % device['dns'])
+            raise ValueError('Cannot determin IP address for device [%s]' % device['dns'])
+
 # endregion
 
         # self._address = device['ip']
@@ -122,6 +128,10 @@ class PingDevice(Device, threading.Thread):
         :param callback: dictionary of callback functions
         :return: True, if device is online
         """
+        if self.ip is None:
+            self._logger.error("Missing ip address for device [%s]" % self.dns)
+            return None
+
         result = self._ping()
 
         if result is not None:
@@ -156,30 +166,34 @@ class PingDiscoverDevice():
 
         self._logger = logger
         self._options = options
-        self._devices = devices
+        self._devices = {}
         self._threads = []
 
-    def listen(self):
+        for device in options['devices']:
 
-        for device in self._options['devices']:
-
-            if device not in self._devices:
+            if device in devices:
+                self._devices[device] = copy.deepcopy(devices[device])
+            else:
                 self._devices[device] = {}
+                self._devices[device]['key'] = device
                 self._devices[device]['dns'] = device
-
-            self._devices[device]['key'] = device
 
             for key in ['psize', 'timeout', 'sleep', 'callback', 'online']:
                 if key in self._options:
                     if key not in self._devices[device]:
                         self._devices[device][key] = self._options[key]
 
-            thread = PingDevice(self._logger, self._devices[device])
-            thread.start()
-            self._threads.append(thread)
+    def listen(self):
 
-            # for thread in threads:
-            #     thread.join()
+        for device in self._devices:
+
+            try:
+                thread = PingDevice(self._logger, self._devices[device])
+                thread.start()
+                self._threads.append(thread)
+            except ValueError, e:
+                self._logger.error(e.message)
+
 
     def shutdown(self):
         for thread in self._threads:
@@ -211,9 +225,9 @@ if __name__ == '__main__':
                'callback': {'new': evt_new, 'off': evt_off},
                'devices': ['easybox', 'access', 'opti960']}
 
-    devices = {'access': {'dns': 'access', 'sleep': 1, 'online': False},
-               'opti960': {'dns': 'opti960', 'sleep': 1, 'online': False},
-               'easybox': {'dns': 'easybox', 'sleep': 10, 'online': True}
+    devices = {'access': {'key': 'access', 'dns': 'access', 'sleep': 1, 'online': False},
+               'opti960': {'key': 'opti960', 'dns': 'opti960', 'sleep': 1, 'online': False},
+               'easybox': {'key': 'easybox', 'dns': 'easybox', 'sleep': 10, 'online': True}
                }
 
     discover = PingDiscoverDevice(logger, options, devices)

@@ -96,15 +96,15 @@ class HttpDiscoverDevice:
         self._socket = None
         self._devices = {}
 
-        for device in options['devices']:
-            if device in devices:
-                devices[device]['key'] = device
-                if 'callback' not in devices[device]:
-                    devices[device]['callback'] = options['callback']
+        for dev in options['devices']:
+            if dev in devices:
+                device = copy.deepcopy(devices[dev])
+                if 'callback' not in device:
+                    device['callback'] = options['callback']
                 key = options['key']
-                if key in devices[device]:
-                    id = devices[device][key]
-                    self._devices[id] = HttpDevice(self._logger, devices[device])
+                if key in device:
+                    id = device[key]
+                    self._devices[id] = HttpDevice(self._logger, device)
                     self._logger.info("Device [%s] with %s [%s] registered for http requests!" %
                                      (self._devices[id].key, key, self._devices[id].config(key)))
 
@@ -190,6 +190,7 @@ if __name__ == '__main__':
                'callback': {'update': http_zone_changed}}
 
     nexus = {
+        'key': 'nexus',
         'display': 'Google Nexus 10',
         'dns': 'nexus',
         'ip': '192.168.100.60',
@@ -200,6 +201,7 @@ if __name__ == '__main__':
     }
 
     htc = {
+        'key': 'htc',
         'display': 'HTC One M7',
         'dns': 'htc',
         'ip': '192.168.2.50',
