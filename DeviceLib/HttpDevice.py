@@ -61,6 +61,10 @@ class HttpRequestHandler(BaseHTTPRequestHandler):
             # self.wfile.write(threading.current_thread().getName())
             # self.wfile.write('\n')
 
+    def log_message(self, format, *args):
+        # disable default logging of get request
+        return
+
 class HttpServer(ThreadingMixIn, HTTPServer):
     """
     Helper class to pass options to the request handler
