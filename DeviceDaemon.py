@@ -22,8 +22,9 @@ import threading
 import time
 import platform
 
-# requires package python-daemon
+# requires packages python-daemon and pidfile-0.1.1
 import daemon
+from pidfile import PidFile
 
 from DeviceLib.Device import Device
 from DeviceLib.BluetoothDevice import BluetoothDiscoverDevice, BluetoothDevice
@@ -241,6 +242,7 @@ class Controller():
         self._logger.debug("Controller constructor ...")
 
         self._root = options['controller']['root']
+        self._pidfile = options['controller']['pidfile']
 
         self._ping = options['ping']
         self._ping['discover'] = None
@@ -405,8 +407,13 @@ class Controller():
     def root(self):
         return self._root
 
+    @property
+    def pidfile(self):
+        return self._pidfile
+
 
 def daemonize(controller):
+
     # search log file handle: preserve file handler
     handle = None
     for handle in controller.logger.handlers:
@@ -429,10 +436,12 @@ def daemonize(controller):
         if type(handle) is logging.StreamHandler:
             controller.logger.removeHandler(handle)
 
+
     context = daemon.DaemonContext(working_directory=controller.root,
                                    files_preserve=_preserve,
                                    stdout=_stdout,
                                    stderr=_stderr,
+                                   pidfile=PidFile(controller.pidfile),
                                    detach_process=True)
 
     context.signal_map = {
@@ -489,6 +498,7 @@ def main():
                   'log': root + '/logging.cfg',
                   'dev': root + '/devices.cfg',
                   'loglevel': 'DEBUG',
+                  'pidfile': '/var/run/DeviceDaemon.pid',
                   'daemon': False}
 
     bluetooth = {'enabled': True,
